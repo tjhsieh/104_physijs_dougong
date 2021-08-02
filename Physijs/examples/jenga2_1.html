@@ -1,0 +1,1596 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+	<title>Jenga - Physijs</title>
+	
+	<link rel="stylesheet" type="text/css" href="css/styles.css" />
+	
+	<script type="text/javascript" src="js/three.min.js"></script>
+	<script type="text/javascript" src="js/stats.js"></script>
+	<script type="text/javascript" src="../physi.js"></script>
+	<script src="js/controls/TrackballControls.js"></script>
+  	<script src="js/loaders/ColladaLoader.js"></script>
+
+    <script src="js/Detector.js"></script>	
+	<script type="text/javascript">
+	
+	'use strict';
+	
+	Physijs.scripts.worker = '../physijs_worker.js';
+	Physijs.scripts.ammo = '../Physijs/examples/js/ammo.js';
+	
+	var initScene, initEventHandling, render, createTower,
+		renderer, render_stats, physics_stats, scene, dir_light, am_light, camera,
+		table, blocks = [], table_material, block_material, intersect_plane,
+		selected_block = null, mouse_position = new THREE.Vector3, block_offset = new THREE.Vector3, _i, _v3 = new THREE.Vector3;
+	var  wheel_geometry, loader;
+	var dougong;
+	//var O_part = parseFloat(prompt("單位","請在這裡輸入"));
+	//var O_part1 = O_part + 1;
+	//alert(O_part1);
+	initScene = function() {
+		renderer = new THREE.WebGLRenderer({ antialias: true });
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		renderer.shadowMapEnabled = true;
+		renderer.shadowMapSoft = true;
+		document.getElementById( 'viewport' ).appendChild( renderer.domElement );
+		
+		render_stats = new Stats();
+		render_stats.domElement.style.position = 'absolute';
+		render_stats.domElement.style.top = '1px';
+		render_stats.domElement.style.zIndex = 100;
+		document.getElementById( 'viewport' ).appendChild( render_stats.domElement );
+
+		physics_stats = new Stats();
+		physics_stats.domElement.style.position = 'absolute';
+		physics_stats.domElement.style.top = '50px';
+		physics_stats.domElement.style.zIndex = 100;
+		document.getElementById( 'viewport' ).appendChild( physics_stats.domElement );
+		
+		scene = new Physijs.Scene({ fixedTimeStep: 1 / 120 });
+		scene.setGravity(new THREE.Vector3( 0, -30, 0 ));
+		scene.addEventListener(
+			'update',
+			function() {
+
+				if ( selected_block !== null ) {
+					
+					_v3.copy( mouse_position ).add( block_offset ).sub( selected_block.position ).multiplyScalar( 5 );
+					_v3.y = 0;
+					selected_block.setLinearVelocity( _v3 );
+					
+					// Reactivate all of the blocks
+					_v3.set( 0, 0, 0 );
+					for ( _i = 0; _i < blocks.length; _i++ ) {
+						blocks[_i].applyCentralImpulse( _v3 );
+					}
+				}
+
+				scene.simulate( undefined, 1 );
+				physics_stats.update();
+			}
+		);
+		
+		camera = new THREE.PerspectiveCamera(
+			35,
+			window.innerWidth / window.innerHeight,
+			1,
+			1000
+		);
+		camera.position.set( 25, 20, 25 );
+		camera.lookAt(new THREE.Vector3( 0, 7, 0 ));
+		scene.add( camera );
+		
+		// ambient light
+		am_light = new THREE.AmbientLight( 0x444444 );
+		scene.add( am_light );
+
+		// directional light
+		dir_light = new THREE.DirectionalLight( 0xFFFFFF );
+		dir_light.position.set( 20, 30, -5 );
+		dir_light.target.position.copy( scene.position );
+		dir_light.castShadow = true;
+		dir_light.shadowCameraLeft = -30;
+		dir_light.shadowCameraTop = -30;
+		dir_light.shadowCameraRight = 30;
+		dir_light.shadowCameraBottom = 30;
+		dir_light.shadowCameraNear = 20;
+		dir_light.shadowCameraFar = 200;
+		dir_light.shadowBias = -.001
+		dir_light.shadowMapWidth = dir_light.shadowMapHeight = 2048;
+		dir_light.shadowDarkness = .5;
+		scene.add( dir_light );
+		
+		// Materials
+		table_material = Physijs.createMaterial(
+			new THREE.MeshLambertMaterial({ map: THREE.ImageUtils.loadTexture( 'images/wood.jpg' ), ambient: 0xFFFFFF }),
+			.9, // high friction
+			.2 // low restitution
+		);
+		table_material.map.wrapS = table_material.map.wrapT = THREE.RepeatWrapping;
+		table_material.map.repeat.set( 5, 5 );
+		
+		block_material = Physijs.createMaterial(
+			new THREE.MeshLambertMaterial({ map: THREE.ImageUtils.loadTexture( 'images/plywood.jpg' ), ambient: 0xFFFFFF }),
+			.4, // medium friction
+			.4 // medium restitution
+		);
+		block_material.map.wrapS = block_material.map.wrapT = THREE.RepeatWrapping;
+		block_material.map.repeat.set( 1, .5 );
+		
+		// Table
+		table = new Physijs.BoxMesh(
+			new THREE.CubeGeometry(50, 1, 50),
+			table_material,
+			0, // mass
+			{ restitution: .2, friction: .8 }
+		);
+		table.position.y = -.5;
+		table.receiveShadow = true;
+		scene.add( table );
+		
+		/*loader = new THREE.ColladaLoader();
+				loader.options.convertUpAxis = true;
+				var string_1 = './models/05/05-01.dae';
+				loader.load( string_1, function ( collada ) {
+				dae = collada.scene;
+				//skin = collada.skins[ 0 ];
+				dae.scale.x = dae.scale.y = dae.scale.z = 0.002;
+				dae.rotation.x = -3.14/2;
+				//dae[i - 1].material = new THREE.MeshBasicMaterial( { color: 0xff0000 } ); 
+				//dae[i - 1].color = new THREE.Color(0x8f8f8f);
+				dae.children[0].children[0].material = new THREE.MeshPhongMaterial( { ambient: 0xff5533, color: 0xff5533, specular: 0x111111, shininess: 200 } );
+				dae.updateMatrix();
+				//wheel_geometry = new THREE.CylinderGeometry( 2, 2, 1, 8 );
+				
+				} );*/
+		//wheel_geometry = dae.children[0].geometry;
+		createTower();
+		
+		intersect_plane = new THREE.Mesh(
+			new THREE.PlaneGeometry( 150, 150 ),
+			new THREE.MeshBasicMaterial({ opacity: 0, transparent: true })
+		);
+		intersect_plane.rotation.x = Math.PI / -2;
+		scene.add( intersect_plane );
+
+		initEventHandling();
+		
+		requestAnimationFrame( render );
+		scene.simulate();
+	};
+	
+	render = function() {
+		requestAnimationFrame( render );
+		renderer.render( scene, camera );
+		render_stats.update();
+	};
+	
+	createTower = (function() {
+		var block_length = 6, block_height = 1, block_width = 1.5, block_offset = 2;
+		    //wheel_geometry = new THREE.CylinderGeometry( 2, 2, 1, 8 );
+			//block_geometry = new THREE.CubeGeometry( block_length, block_height, block_width );
+		var dougong01, dougong02, dougong03, dougong04, dougong05, dougong06, dougong07, dougong08, dougong09, dougong10, dougong11, dougong12;
+		var O_part = parseFloat(prompt("單位","0.1"));
+        
+		dougong01 = function() {
+			var dougong01_01, _object
+			
+			dougong01_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 2.4, 0.8, 2.4 ),
+				block_material
+			);
+			dougong01_01.position.y = 0;
+			dougong01_01.position.z = 0;
+			dougong01_01.castShadow = true;
+			dougong01_01.receiveShadow = true;
+			
+			_object = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 3.2, 0.4, 3.2 ),
+				block_material
+			);
+			_object.position.y = 0.6;
+			//_object.position.x = -2;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong01_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1.1, 0.8, 1.1 ),
+				block_material
+			);
+			_object.position.y = 1.2;
+			_object.position.x = -1.05;
+			_object.position.z = -1.05;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong01_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1.1, 0.8, 1.1 ),
+				block_material
+			);
+			_object.position.y = 1.2;
+			_object.position.x = 1.05;
+			_object.position.z = 1.05;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong01_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1.1, 0.8, 1.1 ),
+				block_material
+			);
+			_object.position.y = 1.2;
+			_object.position.x = 1.05;
+			_object.position.z = -1.05;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong01_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1.1, 0.8, 1.1 ),
+				block_material
+			);
+			_object.position.y = 1.2;
+			_object.position.x = -1.05;
+			_object.position.z = 1.05;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong01_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 0.3, 0.4, 1 ),
+				block_material
+			);
+			_object.position.y = 1.0;
+			_object.position.x = 0.65;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong01_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 0.3, 0.4, 1 ),
+				block_material
+			);
+			_object.position.y = 1.0;
+			_object.position.x = -0.65;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong01_01.add( _object );
+
+			return dougong01_01;
+		};
+		
+		dougong02 = function() {
+			var dougong02_01, _object
+			
+			dougong02_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1, 0.1, 3.4 ),
+				block_material
+			);
+			dougong02_01.position.y = 0;
+			dougong02_01.position.z = 0;
+			dougong02_01.castShadow = true;
+			dougong02_01.receiveShadow = true;
+			
+			for(var i = 0.1; i.toFixed(2) <= 0.5;i = i + O_part)
+			{
+				//i = i.toFixed(2) + 0.1;
+				//alert(i);
+				_object = new Physijs.BoxMesh(
+					new THREE.CubeGeometry( 1, 0.1, 3.4 + Math.sqrt(i / 0.459184) * 2),
+					block_material
+				);
+			
+			
+				_object.position.y = i;
+				_object.position.x = 0;
+				_object.position.z = 0;
+				_object.castShadow = true;
+				_object.receiveShadow = true;
+				dougong02_01.add( _object );
+				
+			}
+			
+			for(var i = 0.6; i.toFixed(2) <= 0.8;i = i + O_part)
+			{
+				//alert(i);
+				for(var j = -1;j < 2;j+=2)
+				{
+					_object = new Physijs.BoxMesh(
+						new THREE.CubeGeometry( 1, 0.1, 1.3 + Math.sqrt(i / 0.459184) ),
+						block_material
+					);
+				
+					_object.position.y = i;
+					_object.position.x = 0;
+					_object.position.z = j * (Math.sqrt(i / 0.459184) + 0.8 + 1.3) / 2;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong02_01.add( _object );
+				}
+								
+			}	
+			
+			_object = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1, 0.6, 2.7 ),
+				block_material
+			);
+			
+			
+			_object.position.y = 1.15;
+			_object.position.x = 0;
+			_object.position.z = 1.75;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong02_01.add( _object );
+
+			
+			
+			
+			_object = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1, 0.6, 2.7 ),
+				block_material
+			);
+			
+			
+			_object.position.y = 1.15;
+			_object.position.x = 0;
+			_object.position.z = -1.75;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong02_01.add( _object );			
+			
+
+			return dougong02_01;
+		};
+
+		dougong03 = function() {
+			
+			var dougong03_01, _object
+			
+			dougong03_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 6.4, 0.6, 0.8 ),
+				block_material
+			);
+			dougong03_01.position.y = 0;
+			dougong03_01.position.z = 0;
+			dougong03_01.castShadow = true;
+			dougong03_01.receiveShadow = true;
+			
+			for(var i = -1;i < 2;i+=2)
+			{
+				for(var j = -1;j < 2;j+=2)
+				{
+				
+					_object = new Physijs.BoxMesh(
+						new THREE.CubeGeometry( (6.4 - 1.0) / 2, 0.6, 0.1 ),
+						block_material
+					);
+			
+			
+					_object.position.y = 0;
+					_object.position.x = j * ((6.4) / 2 - (6.4 - 1.0) / 4);
+					_object.position.z = i * 0.45;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong03_01.add( _object );
+				
+				}
+			
+			}
+			
+			for(var i = 0.8; i > 0.4;i = i.toFixed(3) - O_part)
+			{
+				_object = new Physijs.BoxMesh(
+					new THREE.CubeGeometry( Math.sqrt(i / 0.459184) * 2 + 2 + 1.6, 0.1, 0.8 ),
+					block_material
+				);
+				
+				_object.position.y = i - 1.15;
+				_object.position.x = 0;
+				_object.position.z = 0;
+				_object.castShadow = true;
+				_object.receiveShadow = true;
+				dougong03_01.add( _object );
+				
+				for(var j = -1;j < 2;j+=2)
+				{
+				
+					for(var k = -1;k < 2;k+=2)
+					{
+						_object = new Physijs.BoxMesh(
+							new THREE.CubeGeometry( Math.sqrt(i / 0.459184) + 1 + 0.3, 0.1, 0.1 ),
+							block_material
+						);
+			
+			
+						_object.position.y = i - 1.15;
+						_object.position.x = k * (1.6 + Math.sqrt(i / 0.459184) - 0.3 + 1) / 2;
+						_object.position.z = j * 0.45;
+						_object.castShadow = true;
+						_object.receiveShadow = true;
+						dougong03_01.add( _object );
+					}
+				
+				}
+			}
+			
+			
+			
+			_object = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( Math.sqrt(0.4 / 0.459184) + 1 + 0.3, 0.1, 1 ),
+				block_material
+			);
+			
+			
+			_object.position.y = -0.75;
+			_object.position.x = (1.6 + Math.sqrt(0.4 / 0.459184) - 0.3 + 1) / 2;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong03_01.add( _object );
+			
+			
+			
+			_object = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( Math.sqrt(0.4 / 0.459184) + 1 + 0.3, 0.1, 1 ),
+				block_material
+			);
+			
+			
+			_object.position.y = -0.75;
+			_object.position.x = -(1.6 + Math.sqrt(0.4 / 0.459184) - 0.3 + 1) / 2;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong03_01.add( _object );
+			
+			for(var i = 0.3; i > -0.1;i = i.toFixed(3) - O_part)
+			{
+				
+				//alert(i);
+				for(var j = -1;j < 2;j+=2)
+				{
+					_object = new Physijs.BoxMesh(
+						new THREE.CubeGeometry( Math.sqrt(i / 0.459184) + 1, 0.1, 1 ),
+						block_material
+					);
+				
+					_object.position.y = -1.15 + i;
+					_object.position.x = j * (1.6 + Math.sqrt(i / 0.459184) + 1) / 2;
+					_object.position.z = 0;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong03_01.add( _object );
+				}				
+			}
+			
+			
+			_object = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 4.4, 0.6, 0.8 ),
+				block_material
+			);
+			
+			
+			_object.position.y = 0.3 + 0.3;
+			_object.position.x = 0;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong03_01.add( _object );
+			return dougong03_01;
+		};
+		
+		dougong04 = function() {
+			
+			var dougong04_01, _object
+			
+			dougong04_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1.6, 0.2, 1.4 ),
+				block_material
+			);
+			dougong04_01.position.y = 0;
+			dougong04_01.position.z = 0;
+			dougong04_01.castShadow = true;
+			dougong04_01.receiveShadow = true;
+			
+			_object = new Physijs.BoxMesh(
+						new THREE.CubeGeometry( 0.3, 0.4, 1.4 ),
+						block_material
+					);
+					
+					_object.position.y = 0.2 / 2 + 0.4 / 2;
+					_object.position.x = 1.6 / 2  - 0.3 / 2;
+					_object.position.z = 0;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong04_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+						new THREE.CubeGeometry( 0.3, 0.4, 1.4 ),
+						block_material
+					);
+					
+					_object.position.y = 0.2 / 2 + 0.4 / 2;
+					_object.position.x = - 1.6 / 2 + 0.3 / 2;
+					_object.position.z = 0;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong04_01.add( _object );
+			
+			for(var i = 0.1; i < 0.5;i = i + O_part)
+			{
+				//alert((i + 0.1).toFixed(3));
+				_object = new Physijs.BoxMesh(
+							new THREE.CubeGeometry( 1.6 - Math.sqrt(i / 10), 0.1, 1.4 - Math.sqrt(i / 10)),
+							block_material
+						);
+					
+						_object.position.y = -0.05 - i;
+						_object.position.x = 0;
+						_object.position.z = 0;
+						_object.castShadow = true;
+						_object.receiveShadow = true;
+						dougong04_01.add( _object );
+			
+			}
+					
+					
+			return dougong04_01;
+		};
+
+		dougong05 = function() {
+			
+			var dougong05_01, _object
+			
+			dougong05_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1.6, 0.2, 1.8 ),
+				block_material
+			);
+			dougong05_01.position.y = 0;
+			dougong05_01.position.z = 0;
+			dougong05_01.castShadow = true;
+			dougong05_01.receiveShadow = true;
+			
+			/*_object = new Physijs.BoxMesh(
+						new THREE.CubeGeometry( 0.2, 0.4, 1.4 ),
+						block_material
+					);
+					
+					_object.position.y = 0.2 / 2 + 0.4 / 2;
+					_object.position.x = 1.6 / 2  - 0.2 / 2;
+					_object.position.z = 0;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong05_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+						new THREE.CubeGeometry( 0.2, 0.4, 1.4 ),
+						block_material
+					);
+					
+					_object.position.y = 0.2 / 2 + 0.4 / 2;
+					_object.position.x = - 1.6 / 2 + 0.2 / 2;
+					_object.position.z = 0;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong05_01.add( _object );*/
+			
+			for(var i = 0.1; i < 0.5;i = i + O_part)
+			{
+				//alert((i + 0.1).toFixed(3));
+				_object = new Physijs.BoxMesh(
+							new THREE.CubeGeometry( 1.6 - Math.sqrt(i / 10), 0.1, 1.8 - Math.sqrt(i / 10)),
+							block_material
+						);
+					
+						_object.position.y = -0.05 - i;
+						_object.position.x = 0;
+						_object.position.z = 0;
+						_object.castShadow = true;
+						_object.receiveShadow = true;
+						dougong05_01.add( _object );
+			
+			}
+					
+			for(var i = -1; i < 2;i = i + 2)
+			{
+				for(var j = -1; j < 2;j = j + 2)
+				{
+				//alert(i);
+					_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.3, 0.4, 0.4),
+								block_material
+							);
+					
+							_object.position.y = 0.4 / 4 + 0.4 / 2;
+							_object.position.x = (0.8 - 0.15) * i;
+							_object.position.z = (0.9 - 0.2) * j;
+							_object.castShadow = true;
+							_object.receiveShadow = true;
+							dougong05_01.add( _object );
+				}
+				_object = new Physijs.BoxMesh(
+						new THREE.CubeGeometry( 0.2, 0.2, 1),
+						block_material
+					);
+					
+					_object.position.y = 0.4 / 4 + 0.2 / 2;
+					_object.position.x = (0.8 - 0.2) * i;
+					_object.position.z = 0;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong05_01.add( _object );
+			
+			}
+					
+			return dougong05_01;
+		};		
+		
+		
+		dougong06 = function() {
+			
+			var dougong06_01, _object
+			
+			dougong06_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1, 0.1, 3.2 ),
+				block_material
+			);
+			/*dougong06_01.position.y = 0;
+			dougong06_01.position.z = 0;
+			dougong06_01.castShadow = true;
+			dougong06_01.receiveShadow = true;
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1, 0.08, Math.sqrt(0.18 * 40 / 9) * 2 + 3.2),
+								block_material
+							);
+							
+			_object.position.y = 0.08 / 2 + 0.1 / 2;
+			_object.position.x = 0;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong06_01.add( _object );*/
+					
+			for(var i = 0.2; i < 1;i = i + O_part)
+			{
+				if(i < 0.55)
+				{
+					_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1, 0.1, Math.sqrt(i * 40 / 9) * 2 + 3.2),
+								block_material
+							);
+							
+					_object.position.y = (i - 0.1);
+					_object.position.x = 0;
+					_object.position.z = 0;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong06_01.add( _object );
+					
+				}
+				else if(i < 0.9)
+				{
+					_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1, 0.1, Math.sqrt(i * 40 / 9) + 1.2),
+								block_material
+							);
+							
+					_object.position.y = (i - 0.1);
+					_object.position.x = 0;
+					_object.position.z = (0.8 + ((Math.sqrt(i * 40 / 9)) + 1.2))/ 2 ;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong06_01.add( _object );
+					
+					_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1, 0.1, Math.sqrt(i * 40 / 9) + 1.2),
+								block_material
+							);
+							
+					_object.position.y = (i - 0.1);
+					_object.position.x = 0;
+					_object.position.z = -(0.8 + ((Math.sqrt(i * 40 / 9)) + 1.2))/ 2 ;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong06_01.add( _object );
+					
+				}
+				else
+				{
+					_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1, 0.6, Math.sqrt(i * 40 / 9) + 1.2),
+								block_material
+							);
+							
+					_object.position.y = (i + 1.2)/2 + 0.1 / 2;
+					_object.position.x = 0;
+					_object.position.z = (0.8 + ((Math.sqrt(i * 40 / 9)) + 1.2))/ 2 ;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong06_01.add( _object );
+					
+					_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1, 0.6, Math.sqrt(i * 40 / 9) + 1.2),
+								block_material
+							);
+							
+					_object.position.y = (i + 1.2)/2 + 0.1 / 2;
+					_object.position.x = 0;
+					_object.position.z = -(0.8 + ((Math.sqrt(i * 40 / 9)) + 1.2))/ 2 ;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong06_01.add( _object );
+				}
+					
+						
+			}
+			
+			
+					
+			return dougong06_01;
+		};
+		
+		dougong07 = function() {
+			
+			var dougong07_01, _object
+			
+			dougong07_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1, 0.1, 6.8 ),
+				block_material
+			);
+			dougong07_01.position.y = 0;
+			dougong07_01.position.z = 0;
+			dougong07_01.castShadow = true;
+			dougong07_01.receiveShadow = true;
+			
+			/*_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1, 0.08, Math.sqrt(0.18 * 40 / 9) * 2 + 3.2),
+								block_material
+							);
+							
+			_object.position.y = 0.08 / 2 + 0.1 / 2;
+			_object.position.x = 0;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong07_01.add( _object );*/
+					
+			for(var i = 0.2; i < 1;i = i + O_part)
+			{
+				if(i < 0.55)
+				{
+					_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1, 0.1, Math.sqrt(i / 0.625) * 2 + 6.8),
+								block_material
+							);
+							
+					_object.position.y = (i - 0.1);
+					_object.position.x = 0;
+					_object.position.z = 0;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong07_01.add( _object );
+					
+				}
+				else if(i < 0.9)
+				{
+					_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1, 0.1, Math.sqrt(i / 0.625) + 3),
+								block_material
+							);
+							
+					_object.position.y = (i - 0.1);
+					_object.position.x = 0;
+					_object.position.z = (0.8 + Math.sqrt(i / 0.625) + 3)/ 2 ;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong07_01.add( _object );
+					
+					_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1, 0.1, Math.sqrt(i / 0.625) + 3),
+								block_material
+							);
+							
+					_object.position.y = (i - 0.1);
+					_object.position.x = 0;
+					_object.position.z = -((0.8 + Math.sqrt(i / 0.625) + 3)/ 2) ;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong07_01.add( _object );
+					
+				}
+				else
+				{
+					_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1, 0.6, Math.sqrt(i / 0.625) + 3),
+								block_material
+							);
+							
+					_object.position.y = (i + 1.2) / 2 + 0.1 / 2;
+					_object.position.x = 0;
+					_object.position.z = (0.8 + Math.sqrt(i / 0.625) + 3)/ 2;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong07_01.add( _object );
+					
+					_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1, 0.6, Math.sqrt(i / 0.625) + 3),
+								block_material
+							);
+							
+					_object.position.y = (i + 1.2) / 2 + 0.1 / 2;
+					_object.position.x = 0;
+					_object.position.z = -(0.8 + Math.sqrt(i / 0.625) + 3)/ 2;
+					_object.castShadow = true;
+					_object.receiveShadow = true;
+					dougong07_01.add( _object );
+				}
+					
+						
+			}
+			
+			
+					
+			return dougong07_01;
+		};
+		
+		dougong08 = function() {
+			
+			var dougong08_01, _object
+			
+			dougong08_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 7, 1, 0.8 ),
+				block_material
+			);
+			dougong08_01.position.y = 0;
+			dougong08_01.position.z = 0;
+			dougong08_01.castShadow = true;
+			dougong08_01.receiveShadow = true;
+			dougong08_01.receiveShadow = true;
+			dougong08_01.receiveShadow = true;
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 4.4, 0.6, 0.8),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = 0.5 + 0.3;
+			_object.position.x = 0;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong08_01.add( _object );
+					
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.2, 1.3, 1.0),
+								block_material
+							);
+							
+			_object.position.y = -(1.3 - 1) / 2;
+			_object.position.x = (7 +0.2) / 2;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong08_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1.8, 1.5, 1.0),
+								block_material
+							);
+							
+			_object.position.y = -(1.5 - 1) / 2;
+			_object.position.x = (7 +0.4 + 1.8) / 2;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong08_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1.8, 1.5, 1.0),
+								block_material
+							);
+							
+			_object.position.y = -(1.5 - 1) / 2;
+			_object.position.x = -(7 +0.4 + 1.8) / 2;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong08_01.add( _object );
+			
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.2, 1.3, 1.0),
+								block_material
+							);
+							
+			_object.position.y = -(1.3 - 1) / 2;
+			_object.position.x = -(7 +0.2) / 2;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong08_01.add( _object );
+			
+			
+			
+			return dougong08_01;
+		};
+		
+		dougong09 = function() {
+			
+			var dougong09_01, _object
+			
+			dougong09_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1.6, 0.2, 1.8 ),
+				block_material
+			);
+			dougong09_01.position.y = 0;
+			dougong09_01.position.z = 0;
+			dougong09_01.castShadow = true;
+			dougong09_01.receiveShadow = true;
+			dougong09_01.receiveShadow = true;
+			dougong09_01.receiveShadow = true;
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.3, 0.4, 1.8),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = (0.4 + 0.2) / 2;
+			_object.position.x = (1.6 - 0.3) / 2;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong09_01.add( _object );
+					
+					
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.3, 0.4, 0.4),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = (0.4 + 0.2) / 2;
+			_object.position.x = -(1.6 - 0.3) / 2;
+			_object.position.z = (1.8 - 0.4)/2;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong09_01.add( _object );
+			
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.3, 0.4, 0.4),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = (0.4 + 0.2) / 2;
+			_object.position.x = -(1.6 - 0.3) / 2;
+			_object.position.z = -(1.8 - 0.4)/2;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong09_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.15, 0.2, 1.0),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = (0.2 + 0.2) / 2;
+			_object.position.x = -(1.6 - 0.45) / 2;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong09_01.add( _object );
+			
+			
+			for(var i = 0.1; i < 0.5;i = i + O_part)
+			{
+				//alert((i + 0.1).toFixed(3));
+				_object = new Physijs.BoxMesh(
+							new THREE.CubeGeometry( 1.6 - Math.sqrt(i / 10), 0.1, 1.8 - Math.sqrt(i / 10)),
+							block_material
+						);
+					
+						_object.position.y = -0.05 - i;
+						_object.position.x = 0;
+						_object.position.z = 0;
+						_object.castShadow = true;
+						_object.receiveShadow = true;
+						dougong09_01.add( _object );
+			
+			}
+			
+			
+			return dougong09_01;
+		};
+
+		
+		dougong10 = function() {
+			
+			var dougong10_01, _object
+			
+			dougong10_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 0.5, 1.5, 7.6 ),
+				block_material
+			);
+			dougong10_01.position.y = 0;
+			dougong10_01.position.z = 0;
+			dougong10_01.castShadow = true;
+			dougong10_01.receiveShadow = true;
+			dougong10_01.receiveShadow = true;
+			dougong10_01.receiveShadow = true;
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.5, 1.5, 3.6),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = 0;
+			_object.position.x = (0.5 + 0.5) / 2;
+			_object.position.z = (7.6 - 3.6) / 2;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong10_01.add( _object );
+					
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.5, 1.5, 3.6),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = 0;
+			_object.position.x = (0.5 + 0.5) / 2;
+			_object.position.z = -(7.6 - 3.6) / 2;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong10_01.add( _object );		
+			
+				
+			return dougong10_01;
+		};
+
+		dougong11 = function() {
+			
+			var dougong11_01, _object
+			
+			/*ougong11_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1.0, 1.5, 9.6 ),
+				block_material
+			);
+			dougong11_01.position.y = 0;
+			dougong11_01.position.z = 0;
+			dougong11_01.castShadow = true;
+			dougong11_01.receiveShadow = true;
+			dougong11_01.receiveShadow = true;
+			dougong11_01.receiveShadow = true;
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.4, 0.6, 9.6),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = (0.6 + 1.5) / 2;
+			_object.position.x = 0;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong11_01.add( _object );*/
+					
+			dougong11_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 1.0, 0.5, 9.6 ),
+				block_material
+			);
+			dougong11_01.position.y = 0;
+			dougong11_01.position.z = 0;
+			dougong11_01.castShadow = true;
+			dougong11_01.receiveShadow = true;
+			dougong11_01.receiveShadow = true;
+			dougong11_01.receiveShadow = true;
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1.0, 1.0, 4.4),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = (1.0 + 0.5) / 2;
+			_object.position.x = 0;
+			_object.position.z = (9.6 - 4.4) / 2;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong11_01.add( _object );		
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 1.0, 1.0, 4.4),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = (1.0 + 0.5) / 2;
+			_object.position.x = 0;
+			_object.position.z = -(9.6 - 4.4) / 2;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong11_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.4, 0.6, 4.4),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = (1.0 + 1.5 + 0.6) / 2;
+			_object.position.x = 0;
+			_object.position.z = (9.6 - 4.4) / 2;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong11_01.add( _object );
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.4, 0.6, 4.4),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = (1.0 + 1.5 + 0.6) / 2;
+			_object.position.x = 0;
+			_object.position.z = -(9.6 - 4.4) / 2;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong11_01.add( _object );
+			
+			return dougong11_01;
+		};
+
+		dougong12 = function() {
+			
+			var dougong12_01, _object
+			
+			dougong12_01 = new Physijs.BoxMesh(
+				new THREE.CubeGeometry( 5.0, 1.0, 0.8 ),
+				block_material
+			);
+			dougong12_01.position.y = 0;
+			dougong12_01.position.z = 0;
+			dougong12_01.castShadow = true;
+			dougong12_01.receiveShadow = true;
+			dougong12_01.receiveShadow = true;
+			dougong12_01.receiveShadow = true;
+			
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.5, 1.0, 0.4),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = 0;
+			_object.position.x = (5.0 + 0.5) / 2;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong12_01.add( _object );
+					
+			_object = new Physijs.BoxMesh(
+								new THREE.CubeGeometry( 0.5, 1.0, 0.4),
+								//new THREE.CubeGeometry( 4.8, 0.6, 0.8),
+								block_material
+							);
+							
+			_object.position.y = 0;
+			_object.position.x = -(5.0 + 0.5) / 2;
+			_object.position.z = 0;
+			_object.castShadow = true;
+			_object.receiveShadow = true;
+			dougong12_01.add( _object );
+			
+			return dougong12_01;
+		};
+
+		
+		return function() {
+			var i, j, rows = 24,
+				block;
+			var dougong_test = new dougong01();
+			dougong_test.castShadow = true;
+			dougong_test.receiveShadow = true;
+			
+			dougong_test.position.x = 0;
+			dougong_test.position.y = 1;
+			dougong_test.position.z = 0;
+			//dougong_test.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test );
+			blocks.push( dougong_test );
+			
+			var dougong_test2 = new dougong02();
+			dougong_test2.castShadow = true;
+			dougong_test2.receiveShadow = true;
+			
+			dougong_test2.position.x = 0;
+			dougong_test2.position.y = 2;
+			dougong_test2.position.z = 0;
+			//dougong_test2.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test2 );
+			blocks.push( dougong_test2 );
+			
+			var dougong_test3 = new dougong03();
+			dougong_test3.castShadow = true;
+			dougong_test3.receiveShadow = true;
+			
+			dougong_test3.position.x = 0;
+			dougong_test3.position.y = 3;
+			dougong_test3.position.z = 0;
+			//dougong_test3.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test3 );
+			blocks.push( dougong_test3 );
+			
+			var dougong_test4_1 = new dougong04();
+			dougong_test4_1.castShadow = true;
+			dougong_test4_1.receiveShadow = true;
+			
+			dougong_test4_1.position.x = 0;
+			dougong_test4_1.position.y = 4;
+			dougong_test4_1.position.z = 3.1 - 0.6;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test4_1 );
+			blocks.push( dougong_test4_1 );
+			
+			var dougong_test4_2 = new dougong04();
+			dougong_test4_2.castShadow = true;
+			dougong_test4_2.receiveShadow = true;
+			
+			dougong_test4_2.position.x = 0;
+			dougong_test4_2.position.y = 4;
+			dougong_test4_2.position.z = - 3.1 + 0.6;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test4_2 );
+			blocks.push( dougong_test4_2 );
+			
+			var dougong_test5_1 = new dougong05();
+			dougong_test5_1.castShadow = true;
+			dougong_test5_1.receiveShadow = true;
+			
+			dougong_test5_1.position.x = 4.6 - 1.6;
+			dougong_test5_1.position.y = 4;
+			dougong_test5_1.position.z = 0;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test5_1 );
+			blocks.push( dougong_test5_1 );
+			
+			var dougong_test5_2 = new dougong05();
+			dougong_test5_2.castShadow = true;
+			dougong_test5_2.receiveShadow = true;
+			
+			dougong_test5_2.position.x = (4.6 - 1.6) * -1;
+			dougong_test5_2.position.y = 4;
+			dougong_test5_2.position.z = 0;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test5_2 );
+			blocks.push( dougong_test5_2 );
+			
+			var dougong_test6_1 = new dougong06();
+			dougong_test6_1.castShadow = true;
+			dougong_test6_1.receiveShadow = true;
+			
+			dougong_test6_1.position.x = (4.6 - 1.6);
+			dougong_test6_1.position.y = 5;
+			dougong_test6_1.position.z = 0;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test6_1 );
+			blocks.push( dougong_test6_1 );
+			
+			var dougong_test6_2 = new dougong06();
+			dougong_test6_2.castShadow = true;
+			dougong_test6_2.receiveShadow = true;
+			
+			dougong_test6_2.position.x = (4.6 - 1.6) * -1;
+			dougong_test6_2.position.y = 5;
+			dougong_test6_2.position.z = 0;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test6_2 );
+			blocks.push( dougong_test6_2 );
+			
+			var dougong_test7 = new dougong07();
+			dougong_test7.castShadow = true;
+			dougong_test7.receiveShadow = true;
+			
+			dougong_test7.position.x = 0;
+			dougong_test7.position.y = 5;
+			dougong_test7.position.z = 0;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test7 );
+			blocks.push( dougong_test7 );
+			
+			var dougong_test8 = new dougong08();
+			dougong_test8.castShadow = true;
+			dougong_test8.receiveShadow = true;
+			
+			dougong_test8.position.x = 0;
+			dougong_test8.position.y = 6;
+			dougong_test8.position.z = 0;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test8 );
+			blocks.push( dougong_test8 );
+			
+			var dougong_test4_3 = new dougong04();
+			dougong_test4_3.castShadow = true;
+			dougong_test4_3.receiveShadow = true;
+			
+			dougong_test4_3.position.x = 4.6 - 1.6;
+			dougong_test4_3.position.y = 7;
+			dougong_test4_3.position.z = (7.2 -1.0) / 2;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test4_3 );
+			blocks.push( dougong_test4_3 );
+			
+			var dougong_test4_4 = new dougong04();
+			dougong_test4_4.castShadow = true;
+			dougong_test4_4.receiveShadow = true;
+			
+			dougong_test4_4.position.x = 4.6 - 1.6;
+			dougong_test4_4.position.y = 7;
+			dougong_test4_4.position.z = -(7.2 -1.0) / 2;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test4_4 );
+			blocks.push( dougong_test4_4 );
+			
+			var dougong_test4_5 = new dougong04();
+			dougong_test4_5.castShadow = true;
+			dougong_test4_5.receiveShadow = true;
+			
+			dougong_test4_5.position.x = -(4.6 - 1.6);
+			dougong_test4_5.position.y = 7;
+			dougong_test4_5.position.z = (7.2 -1.0) / 2;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test4_5 );
+			blocks.push( dougong_test4_5 );
+			
+			var dougong_test4_6 = new dougong04();
+			dougong_test4_6.castShadow = true;
+			dougong_test4_6.receiveShadow = true;
+			
+			dougong_test4_6.position.x = -(4.6 - 1.6);
+			dougong_test4_6.position.y = 7;
+			dougong_test4_6.position.z = -(7.2 -1.0) / 2;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test4_6 );
+			blocks.push( dougong_test4_6 );
+			
+			var dougong_test4_7 = new dougong04();
+			dougong_test4_7.castShadow = true;
+			dougong_test4_7.receiveShadow = true;
+			
+			dougong_test4_7.position.x = 0;
+			dougong_test4_7.position.y = 7;
+			dougong_test4_7.position.z = (9.2 -1.0) / 2;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test4_7 );
+			blocks.push( dougong_test4_7 );
+			
+			var dougong_test4_8 = new dougong04();
+			dougong_test4_8.castShadow = true;
+			dougong_test4_8.receiveShadow = true;
+			
+			dougong_test4_8.position.x = 0;
+			dougong_test4_8.position.y = 7;
+			dougong_test4_8.position.z = -(9.2 -1.0) / 2;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test4_8 );
+			blocks.push( dougong_test4_8 );
+			
+			var dougong_test9_1 = new dougong09();
+			dougong_test9_1.castShadow = true;
+			dougong_test9_1.receiveShadow = true;
+			
+			dougong_test9_1.position.x = (7.0 - 1.0) / 2;
+			dougong_test9_1.position.y = 7;
+			dougong_test9_1.position.z = 0;
+			//dougong_test4.rotation.y = -Math.PI / 2.51;
+			scene.add( dougong_test9_1 );
+			blocks.push( dougong_test9_1 );
+			
+			var dougong_test9_2 = new dougong09();
+			dougong_test9_2.castShadow = true;
+			dougong_test9_2.receiveShadow = true;
+			
+			dougong_test9_2.position.x = -(7.0 - 1.0) / 2;
+			dougong_test9_2.position.y = 7;
+			dougong_test9_2.position.z = 0;
+			dougong_test9_2.rotation.y = -Math.PI;
+			scene.add( dougong_test9_2 );
+			blocks.push( dougong_test9_2 );
+			
+			var dougong_test10_1 = new dougong10();
+			dougong_test10_1.castShadow = true;
+			dougong_test10_1.receiveShadow = true;
+			
+			dougong_test10_1.position.x = (4.6 - 1.6 + 0.25);
+			dougong_test10_1.position.y = 8;
+			dougong_test10_1.position.z = 0;
+			dougong_test10_1.rotation.y = -Math.PI;
+			scene.add( dougong_test10_1 );
+			blocks.push( dougong_test10_1 );
+			
+			var dougong_test10_2 = new dougong10();
+			dougong_test10_2.castShadow = true;
+			dougong_test10_2.receiveShadow = true;
+			
+			dougong_test10_2.position.x = -(4.6 - 1.6 + 0.25);
+			dougong_test10_2.position.y = 8;
+			dougong_test10_2.position.z = 0;
+			//dougong_test10_1.rotation.y = -Math.PI;
+			scene.add( dougong_test10_2 );
+			blocks.push( dougong_test10_2 );
+			
+			var dougong_test11 = new dougong11();
+			dougong_test11.castShadow = true;
+			dougong_test11.receiveShadow = true;
+			
+			dougong_test11.position.x = 0;
+			dougong_test11.position.y = 7.8;
+			dougong_test11.position.z = 0;
+			//dougong_test10_1.rotation.y = -Math.PI;
+			scene.add( dougong_test11 );
+			blocks.push( dougong_test11 );
+			
+			var dougong_test12 = new dougong12();
+			dougong_test12.castShadow = true;
+			dougong_test12.receiveShadow = true;
+			
+			dougong_test12.position.x = 0;
+			dougong_test12.position.y = 8.6;
+			dougong_test12.position.z = 0;
+			//dougong_test10_1.rotation.y = -Math.PI;
+			scene.add( dougong_test12 );
+			blocks.push( dougong_test12 );
+			
+			//var loader = new Array(25);
+			//var dae = new Array(25);
+			/*for ( i = 0; i < rows; i++ ) {
+			var ss =  i + 1;
+				if(i < 10)
+					var string_1 = './models/05/05-0' + ss + '.dae';
+				else 
+					var string_1 = './models/05/05-' + ss + '.dae';
+			
+				
+					//block = new Physijs.CylinderMesh( wheel_geometry, block_material );
+					loader[i] = new THREE.ColladaLoader();
+				    loader[i].options.convertUpAxis = true;
+				    //var string_1 = './models/05/05-01.dae';
+				    loader[i].load( string_1, function ( collada ) {
+				    dae[i] = collada.scene;
+				    //skin = collada.skins[ 0 ];
+				    //dae.scale.x = dae.scale.y = dae.scale.z = 0.002;
+				    //dae.rotation.x = -3.14/2;
+				    //dae[i - 1].material = new THREE.MeshBasicMaterial( { color: 0xff0000 } ); 
+				    //dae[i - 1].color = new THREE.Color(0x8f8f8f);
+				    dae[i].rotation.x =  -Math.PI / 2.0;
+				    dae[i].children[0].children[0].material = new THREE.MeshPhongMaterial( { ambient: 0xff5533, color: 0xff5533, specular: 0x111111, shininess: 200 } );
+				    dae[i].updateMatrix();
+				    var geometry = dae[i].children[0].children[0].geometry;
+				    block = new Physijs.BoxMesh( geometry, block_material );
+				    block.scale.x = block.scale.y = block.scale.z = 0.1;
+				    //wheel_geometry = new THREE.CylinderGeometry( 2, 2, 1, 8 );
+				    //block.position.y = (block_height / 2) + block_height * i;
+				
+						//block.rotation.y = Math.PI / 2.01; // #TODO: There's a bug somewhere when this is to close to 2
+						block.rotation.x = -Math.PI / 2.01;
+					//block.position.y = (block_height / 2) + block_height * i;
+					
+					
+				
+					block.receiveShadow = true;
+					block.castShadow = true;
+					scene.add( block );
+					blocks.push( block );
+				
+				} );
+				
+					
+			
+			}*/
+		}
+	})();
+	
+	initEventHandling = (function() {
+		var _vector = new THREE.Vector3,
+			projector = new THREE.Projector(),
+			handleMouseDown, handleMouseMove, handleMouseUp;
+		
+		handleMouseDown = function( evt ) {
+			var ray, intersections;
+			
+			_vector.set(
+				( evt.clientX / window.innerWidth ) * 2 - 1,
+				-( evt.clientY / window.innerHeight ) * 2 + 1,
+				1
+			);
+
+			projector.unprojectVector( _vector, camera );
+			
+			ray = new THREE.Raycaster( camera.position, _vector.sub( camera.position ).normalize() );
+			intersections = ray.intersectObjects( blocks );
+
+			if ( intersections.length > 0 ) {
+				selected_block = intersections[0].object;
+				
+				_vector.set( 0, 0, 0 );
+				selected_block.setAngularFactor( _vector );
+				selected_block.setAngularVelocity( _vector );
+				selected_block.setLinearFactor( _vector );
+				selected_block.setLinearVelocity( _vector );
+
+				mouse_position.copy( intersections[0].point );
+				block_offset.subVectors( selected_block.position, mouse_position );
+				
+				intersect_plane.position.y = mouse_position.y;
+			}
+		};
+		
+		handleMouseMove = function( evt ) {
+			
+			var ray, intersection,
+				i, scalar;
+			
+			if ( selected_block !== null ) {
+				
+				_vector.set(
+					( evt.clientX / window.innerWidth ) * 2 - 1,
+					-( evt.clientY / window.innerHeight ) * 2 + 1,
+					1
+				);
+				projector.unprojectVector( _vector, camera );
+				
+				ray = new THREE.Raycaster( camera.position, _vector.sub( camera.position ).normalize() );
+				intersection = ray.intersectObject( intersect_plane );
+				mouse_position.copy( intersection[0].point );
+			}
+			
+		};
+		
+		handleMouseUp = function( evt ) {
+			
+			if ( selected_block !== null ) {
+				_vector.set( 1, 1, 1 );
+				selected_block.setAngularFactor( _vector );
+				selected_block.setLinearFactor( _vector );
+				
+				selected_block = null;
+			}
+			
+		};
+		
+		return function() {
+			renderer.domElement.addEventListener( 'mousedown', handleMouseDown );
+			renderer.domElement.addEventListener( 'mousemove', handleMouseMove );
+			renderer.domElement.addEventListener( 'mouseup', handleMouseUp );
+		};
+	})();
+	
+	window.onload = initScene;
+	
+	</script>
+</head>
+
+<body>
+	<div id="heading">
+		<h1>加入Physijs並模型調整後(可輸入細微參數)</h1>
+		<p>Click & drag on the blocks to move them around.</p>
+	</div>
+	<div id="viewport"></div>
+</body>
+
+</html>
